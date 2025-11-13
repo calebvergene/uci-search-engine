@@ -1,0 +1,9 @@
+Indexed documents: 412 
+ 
+ 
+Unique tokens: 10000 
+ 
+ 
+Total size of index on disk: 14910.96 KB 
+ 
+ 

@@ -6,14 +6,18 @@ from nltk.stem import PorterStemmer
 from nltk.data import find
 from collections import defaultdict
 import json
+from bs4 import XMLParsedAsHTMLWarning
+import warnings
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 
 class InvertedIndex:
-    def __init__(self) -> None:
-        inverted_index = {}
+    def __init__(self, Report) -> None:
+        self.Report = Report
+        self.inverted_index = {}
         self._check_punkt()
         self.ps = PorterStemmer()
-    
+
 
     def scrape_page(self, page_json) -> dict:
         """
@@ -51,11 +55,10 @@ class InvertedIndex:
         @return: a hash_map of key=token:str : value=freq:int
         """
         # First get the title
-        title = soup.title.string.strip()
-
-        if not title:
+        if not soup.title:
             return {}
-
+            
+        title = soup.title.string.strip()
         title_counts = defaultdict(int)
 
         for tok in word_tokenize(title):
@@ -107,12 +110,14 @@ class InvertedIndex:
         freq_map = defaultdict(int)
         pos_map = defaultdict(list)
 
-        for pos, tok in enumerate(tokens):
-            tok = tok.lower()
-            if not re.fullmatch(r"[a-z0-9]+", tok):
+        for pos, token in enumerate(tokens):
+            token = token.lower()
+            if not re.fullmatch(r"[a-z0-9]+", token):
                 continue
 
-            stem = self.ps.stem(tok)
+            stem = self.ps.stem(token)
+            # add stem to Report token set to track unique tokens
+            self.Report.unique_tokens.add(stem)
 
             freq_map[stem] += 1
             pos_map[stem].append(pos)
@@ -123,8 +128,8 @@ class InvertedIndex:
             output[stem] = {
                 "freq": freq_map[stem],
                 "positions": pos_map[stem],
-                "header_bold_count": headers[stem],
-                "title_count": titles[stem]
+                "header_bold_count": headers.get(stem, 0),
+                "title_count": titles.get(stem, 0)
             }
 
         return output
@@ -132,36 +137,39 @@ class InvertedIndex:
     @staticmethod
     def _check_punkt() -> None:
         """
-        Checks if punkt is installed and if it isnt then it will download it for nltk
+        Checks if punkt_tab is installed and if it isnt then it will download it for nltk
         """
         try:
-            find("tokenizers/punkt")
+            find("tokenizers/punkt_tab")
         except LookupError:
-            print("Downloading NLTK punkt tokenizer...")
-            nltk.download("punkt")
+            print("Downloading NLTK punkt_tab tokenizer...")
+            nltk.download("punkt_tab")
+
+
 
 
     def create_postings(self, document_id, token_dict):
-        # updates the inverted index with each new token from the document
         """
-        token_dict:
+        Updates the inverted index with each new token from the document
+        token_dict format:
         key=token:str, 
-        value=[freq:int, positions:list[int], header/bold_count:int, title_count:int]
+        value={"freq":int, "positions":list[int], "header_bold_count":int, "title_count":int}
         """
         for token in token_dict:
             if token not in self.inverted_index:
                 self.inverted_index[token] = []
-            posting = {} # document_id, frequency, proximity, header/bolded
-            posting[document_id] = document_id
-            posting[frequency] = token_dict[token][freq]
-            posting[positions] = token_dict[token][positions]
-            posting[header_bold_count] = token_dict[token][header_bold_count]
-            posting[title_count] = token_dict[token][title_count]
+            
+            posting = {
+                "document_id": document_id,
+                "frequency": token_dict[token]["freq"],
+                "positions": token_dict[token]["positions"],
+                "header_bold_count": token_dict[token]["header_bold_count"],
+                "title_count": token_dict[token]["title_count"]
+            }
+            
+            self.inverted_index[token].append(posting)
 
-            posting_list = self.inverted_index[token]
-            posting_list.append(posting)
-    
-    
+
     def write_inverted_index(self):
         with open("inverted_index.json", "w") as f:
             json.dump(self.inverted_index, f)
