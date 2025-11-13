@@ -151,10 +151,10 @@ class InvertedIndex:
                 self.inverted_index[token] = []
             posting = {} # document_id, frequency, proximity, header/bolded
             posting[document_id] = document_id
-            posting[frequency] = token_dict[token][freq]
-            posting[positions] = token_dict[token][positions]
-            posting[header_bold_count] = token_dict[token][header_bold_count]
-            posting[title_count] = token_dict[token][title_count]
+            posting["frequency"] = token_dict[token]["freq"]
+            posting["positions"] = token_dict[token]["positions"]
+            posting["header_bold_count"] = token_dict[token]["header_bold_count"]
+            posting["title_count"] = token_dict[token]["title_count"]
 
             posting_list = self.inverted_index[token]
             posting_list.append(posting)
