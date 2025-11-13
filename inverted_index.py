@@ -1,3 +1,6 @@
+import json
+
+
 class InvertedIndex:
     def __init__(self):
         inverted_index = {} # token : posting
@@ -19,13 +22,18 @@ class InvertedIndex:
             if token not in self.inverted_index:
                 self.inverted_index[token] = []
             posting = {} # document_id, frequency, proximity, header/bolded
-            posting[document_id] = document_id
-            posting[frequency] = token_dict[token][freq]
-            posting[positions] = token_dict[token][positions]
-            posting[header_bold_count] = token_dict[token][header_bold_count]
-            posting[title_count] = token_dict[token][title_count]
+            posting['document_id'] = document_id
+            posting['freq'] = token_dict[token][freq]
+            posting['positions'] = token_dict[token][positions]
+            posting['header_bold_count'] = token_dict[token][header_bold_count]
+            posting['title_count'] = token_dict[token][title_count]
 
             posting_list = self.inverted_index[token]
             posting_list.append(posting)
-    
-    
+        
+
+    def write_inverted_index(self):
+        with open("inverted_index.json", "w") as f:
+            json.dump(self.inverted_index, f)
+        
+            
