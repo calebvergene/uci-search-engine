@@ -101,12 +101,12 @@ class InvertedIndex:
         @parameters: soup is the beautiful soup to scrap the html for text words in the title
         @return: look at the return typing for scrape_page()
         """
-        # Grab the soup
+        # Grab all the text
         full_text = soup.get_text(separator=" ", strip=True)
         full_text = re.sub(r"\s+", " ", full_text)
 
         tokens = word_tokenize(full_text)
-
+        # Keep track of the frequency and position of each token
         freq_map = defaultdict(int)
         pos_map = defaultdict(list)
 
@@ -116,14 +116,15 @@ class InvertedIndex:
                 continue
 
             stem = self.ps.stem(token)
-            # add stem to Report token set to track unique tokens
+            # add stem to report token set to track unique tokens
             self.Report.unique_tokens.add(stem)
 
             freq_map[stem] += 1
             pos_map[stem].append(pos)
 
+        # Build the final output for the function
         output = {}
-
+        # Merge all the different hash_maps together
         for stem in freq_map:
             output[stem] = {
                 "freq": freq_map[stem],
