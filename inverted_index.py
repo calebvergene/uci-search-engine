@@ -162,3 +162,6 @@ class InvertedIndex:
             posting_list.append(posting)
     
     
+    def write_inverted_index(self):
+        with open("inverted_index.json", "w") as f:
+            json.dump(self.inverted_index, f)
