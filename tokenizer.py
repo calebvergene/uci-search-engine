@@ -1,15 +1,10 @@
-import sys
+
 
 class Tokenizer:
-    # Time complexity: O(n), where n = number of chars in text file
-    # It has to process each character in the file to determine tokens, and the runtime is linear because we do this in one pass, which is efficient!
     @staticmethod
     def tokenize(file_path):
-        # my approach to special chars: remove at the beginning and end to prioritize middle important chars that have more meaning.
-        # nevermind! instructions say "sequences of alphanumeric characters" did so much work for nothing oopsies
         tokens = []
         curr_token = []
-
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
                 while True:
@@ -70,7 +65,10 @@ class Tokenizer:
         for token in sorted_freqs:
             print(f'{token[0]} - {token[1]}')
     
-if __name__ == "__main__":
+
+
+# example how to use this 
+"""if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("No file given.")
         sys.exit(1)
@@ -78,4 +76,4 @@ if __name__ == "__main__":
     file_path = sys.argv[1]
     tokens = Tokenizer.tokenize(file_path)
     freqs = Tokenizer.computeWordFrequencies(tokens)
-    Tokenizer.print(freqs)
+    Tokenizer.print(freqs)"""
