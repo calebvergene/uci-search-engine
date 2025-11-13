@@ -18,7 +18,7 @@ if __name__ == "__main__":
                 Report.indexed_documents += 1
 
     # generate report at the end
-        InvertedIndex.write_inverted_index()
-        Report.read_disk_size()
-        Report.write_report()
+    InvertedIndex.write_inverted_index()
+    Report.read_disk_size()
+    Report.write_report()
                 
