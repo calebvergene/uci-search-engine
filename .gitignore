@@ -1,3 +1,5 @@
 env/
 venv/
 DEV/
+developer.zip
+inverted_index.json
