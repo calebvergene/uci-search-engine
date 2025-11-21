@@ -42,7 +42,6 @@ class Search:
             if re.fullmatch(r"[a-z0-9]+", tok):
                 stem = ps.stem(tok)
                 query_stems.append(stem)
-        print(query_stems)
         return query_stems
 
     def _merge_lists(self, query_words):
@@ -51,21 +50,13 @@ class Search:
         
         # init combined_postings to the first word result
         if query_words[0] not in self.inverted_index:
-            print(f"First word '{query_words[0]}' not in index")
             return []
         combined_postings = self.inverted_index[query_words[0]]
-        print(f"First word '{query_words[0]}' has {len(combined_postings)} postings")
-        print([posting["document_id"] for posting in self.inverted_index[query_words[0]]])
 
         # now just condense the combined results into a singular list by comparing
         for word in query_words[1:]:
             if word not in self.inverted_index:
-                print(f"Word '{word}' not in index")
                 return []
-            
-            print(f"Word '{word}' has {len(self.inverted_index[word])} postings")
-            print([posting["document_id"] for posting in self.inverted_index[word]])
-            print(f"Current combined_postings: {len(combined_postings)} postings")
             
             pointer1, pointer2 = 0, 0
             new_combined_postings = []
@@ -84,7 +75,6 @@ class Search:
                 else:
                     pointer1 += 1
             
-            print(f"After merging with '{word}': {len(new_combined_postings)} postings remain")
             combined_postings = new_combined_postings
         
         return combined_postings
