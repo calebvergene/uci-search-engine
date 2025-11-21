@@ -21,6 +21,7 @@ class InvertedIndex:
         self.url_to_docid = {}
         self._check_punkt()
         self.ps = PorterStemmer()
+        self.seen_fingerprints = set()
 
 
     def scrape_page(self, page_json) -> dict:
@@ -149,6 +150,77 @@ class InvertedIndex:
             print("Downloading NLTK punkt_tab tokenizer...")
             nltk.download("punkt_tab")
 
+    
+
+    # for detecting duplicate pages
+    def hash(self, text):
+        result = 0
+        for i, char in enumerate(text):
+            result = result * 37 + ord(char)
+            result = result % 1000000007
+        return str(result).zfill(16)
+
+    def hash2(self, text):
+        h = 5381 # prime long number
+        for char in text:
+            h = ((h * 33) + ord(char)) % (2**32)
+        
+        # make it look more random
+        h = h ^ (h >> 16)
+        h = h * 2654435761
+        h = h % (2**32)
+        
+        return hex(h)[2:].zfill(16)
+
+    def make_ngrams(self, words):
+        # 5 grams
+        chunks = []
+        for i in range(len(words) - 4):
+            chunk = " ".join(words[i:i+5])
+            chunks.append(chunk)
+        return chunks
+
+    def randomize_ngrams(self, items):
+        if len(items) <= 100:
+            return items
+        items = sorted(items, key=lambda x: self.hash(x))
+        return items[:100]
+
+    def hash_chunks(self, chunks):
+        chosen = self.randomize_ngrams(chunks)
+        result = []
+        for c in chosen:
+            hashed = self.hash2(c)
+            result.append(hashed)
+        return result
+
+    def check_similar(self, hashes):
+        # THRESHOLD = 0.8, pretty leniant
+        # true if dup
+        if not hashes:
+            return False
+        similar = 0
+        for h in hashes:
+            if h in self.seen_fingerprints:
+                similar += 1
+        score = similar / len(hashes)
+        return score > 0.8
+
+    def add_all_hashes(self, hashes):
+        for h in hashes:
+            self.seen_fingerprints.add(h)
+
+    def page_too_similar(self, words):
+        ngrams = self.make_ngrams(words)
+        hashed = self.hash_chunks(ngrams)
+
+        if not self.check_similar(hashed):
+            self.add_all_hashes(hashed)
+            # good
+            return False
+
+        else:
+            return True
 
 
 
@@ -200,6 +272,11 @@ def create_inverted_index():
                     continue
                 
                 token_dict = inverted_index.scrape_page(page_json)
+                words = list(token_dict.keys())
+                # duplicate check
+                if inverted_index.page_too_similar(words):
+                    continue
+
                 inverted_index.create_postings(report.indexed_documents, token_dict)
                 inverted_index.docid_to_url[report.indexed_documents] = url_without_fragment
                 inverted_index.url_to_docid[url_without_fragment] = report.indexed_documents

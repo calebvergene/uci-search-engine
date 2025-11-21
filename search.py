@@ -1,5 +1,9 @@
 import heapq
 import json
+import re
+from nltk.tokenize import word_tokenize
+from nltk.stem import PorterStemmer
+from inverted_index import InvertedIndex
 
 class Search:
     def __init__(self):
@@ -18,17 +22,28 @@ class Search:
     def bool_search(self, query):
         # split up query into AND chunks of words
         # TODO: this is a very basic implementation of splitting the query into words. might need to use proximity in the future. 
-        query_words = query.split()
+        query_words = self._tokenize_query(query)
         if not query_words: return []
-        print('1')
         combined_postings = self._merge_lists(query_words)
         if not combined_postings: return [] # for AND, no documents were a match
-        print('10')
 
         results = self._k_search_results(combined_postings, 5)
 
         return results
 
+
+    def _tokenize_query(self, query):
+        InvertedIndex._check_punkt()
+        query_tokens = word_tokenize(query.lower())
+        query_stems = []
+        ps = PorterStemmer()
+        
+        for tok in query_tokens:
+            if re.fullmatch(r"[a-z0-9]+", tok):
+                stem = ps.stem(tok)
+                query_stems.append(stem)
+        print(query_stems)
+        return query_stems
 
     def _merge_lists(self, query_words):
         """ return one final list of combined postings """
