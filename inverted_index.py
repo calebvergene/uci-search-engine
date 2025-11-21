@@ -9,6 +9,7 @@ from bs4 import XMLParsedAsHTMLWarning
 import warnings
 from generate_report import Report
 import os, json
+from urllib.parse import urldefrag
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 
@@ -17,6 +18,7 @@ class InvertedIndex:
         self.Report = Report
         self.inverted_index = {}
         self.docid_to_url = {}
+        self.url_to_docid = {}
         self._check_punkt()
         self.ps = PorterStemmer()
 
@@ -124,17 +126,16 @@ class InvertedIndex:
             freq_map[stem] += 1
             pos_map[stem].append(pos)
 
-        # Build the final output for the function
         output = {}
-        # Merge all the different hash_maps together
-        for stem in freq_map:
+        all_stems = set(freq_map.keys()) | set(titles.keys()) | set(headers.keys())
+        for stem in all_stems:
             output[stem] = {
-                "freq": freq_map[stem],
-                "positions": pos_map[stem],
+                "freq": freq_map.get(stem, 0),
+                "positions": pos_map.get(stem, []),
                 "header_bold_count": headers.get(stem, 0),
                 "title_count": titles.get(stem, 0)
             }
-
+        
         return output
 
     @staticmethod
@@ -191,9 +192,17 @@ def create_inverted_index():
             print(file_path)
             with open(file_path, 'r') as f:
                 page_json = json.load(f)
+                
+                # remove fragment from URL
+                original_url = page_json['url']
+                url_without_fragment, _ = urldefrag(original_url)
+                if url_without_fragment in inverted_index.url_to_docid:
+                    continue
+                
                 token_dict = inverted_index.scrape_page(page_json)
                 inverted_index.create_postings(report.indexed_documents, token_dict)
-                inverted_index.docid_to_url[report.indexed_documents] = page_json['url']
+                inverted_index.docid_to_url[report.indexed_documents] = url_without_fragment
+                inverted_index.url_to_docid[url_without_fragment] = report.indexed_documents
                 report.indexed_documents += 1
                 print('Document #', report.indexed_documents)
                 if not report.indexed_documents % 5000:
