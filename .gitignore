@@ -3,3 +3,4 @@ venv/
 DEV/
 developer.zip
 inverted_index.json
+doc_id_to_url.json

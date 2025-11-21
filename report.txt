@@ -1,7 +1,7 @@
-Indexed documents: 10000 
+Indexed documents: 55393 
  
  
-Unique tokens: 341948 
+Unique tokens: 707648 
  
  
 Total size of index on disk: 1186860.16 KB 
