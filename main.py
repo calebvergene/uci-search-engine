@@ -4,7 +4,7 @@ from inverted_index import create_inverted_index
 
 if __name__ == "__main__":
     # for creating index
-    # create_inverted_index()
+    create_inverted_index()
 
 
     # for searching
