@@ -25,7 +25,7 @@ class Search:
         self.total_documents = len(self.doc_id_to_url)
     
 
-    def bool_search(self, query, use_or=False):
+    def bool_search(self, query):
         """
         Search with boolean logic.
         use_or=False: AND search (all terms must appear)
@@ -33,15 +33,12 @@ class Search:
         """
         query_words = self._tokenize_query(query)
         if not query_words: return []
-        
-        if use_or:
-            combined_postings = self._merge_lists_or(query_words)
-        else:
-            combined_postings = self._merge_lists(query_words)
+
+        combined_postings = self._merge_lists_or(query_words)
+
             
         if not combined_postings: return []
-
-        results = self.TF_IDF_Search(combined_postings, 5, query_words)
+        results = self.TF_IDF_Search(combined_postings, 20, query_words)
 
         return results
 
@@ -93,6 +90,28 @@ class Search:
         
         return combined_postings
     
+    def _merge_lists_or(self, query_words):
+        """ return combined postings using OR operation (union of postings) """
+        
+        result = {}  # doc_id -> posting
+        
+        for word in query_words:
+            if word not in self.inverted_index:
+                continue
+            
+            postings = self.inverted_index[word]
+            
+            for p in postings:
+                doc_id = p["document_id"]
+                # keep the posting with same structure
+                if doc_id not in result:
+                    result[doc_id] = p
+        
+        # Convert dict back to a sorted list of postings
+        merged_list = list(result.values())
+        merged_list.sort(key=lambda x: x["document_id"])
+        
+        return merged_list
 
     def TF_IDF_Search(self, postings, k, query_words):
         """ 
