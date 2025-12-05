@@ -1,5 +1,6 @@
 import json
 import re
+import heapq
 import math
 from collections import defaultdict
 from nltk.tokenize import word_tokenize
@@ -100,7 +101,7 @@ class Search:
         """
         # Calculate IDF for each query term
         idf_scores = {}
-        document_scores = {}
+      
         for word in query_words:
             if word in self.inverted_index:
                 df = len(self.inverted_index[word])
@@ -122,6 +123,7 @@ class Search:
         query_magnitude = math.sqrt(counter)
         
         #Calculate TFIDF scores for each document by looking up term frequencies for all query words in doc
+        heap_lists = []
         for posting in postings:
             document_id = posting["document_id"]
             document_vector = {}
@@ -164,21 +166,22 @@ class Search:
             if document_magnitude > 0 and query_magnitude > 0:
                 cosine_score = dot_product / (query_magnitude * document_magnitude)
             else:
-                document_scores[document_id] = 0
+                cosine_score = 0
 
-            document_scores[document_id] = cosine_score
+            #Sort by TFIDF w/ Heap
+            if len(heap_lists) < k:
+                heapq.heappush(heap_lists, (cosine_score, document_id))
+            elif cosine_score > heap_lists[0][0]: 
+                heapq.heapreplace(heap_lists, (cosine_score, document_id))
 
-        #Sort Documents by TFIDF using heap
-        heap_list = [] 
-        for posting in postings: 
-            
-            if len(heap_list) < 5:
-                heapq.heappush(heap_list, (cosine_score, document_id))
-            elif cosine_score > heap_list[0][0]:  
-                heapq.heapreplace(heap_list, (cosine_score, document_id))
-            
-
-
-        sorted_results = sorted(heap_list, reverse=True)
+        # Extract from heap in descending order and reverse
+        final_results = []
+        while heap_lists:
+            score, document_id = heapq.heappop(heap_lists)
+            final_results.append((self.doc_id_to_url[str(document_id)], document_id, score))
+        
+        final_results.reverse()
+         
+        return final_results
                     
                    
