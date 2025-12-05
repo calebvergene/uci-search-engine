@@ -168,14 +168,17 @@ class Search:
 
             document_scores[document_id] = cosine_score
 
+        #Sort Documents by TFIDF using heap
+        heap_list = [] 
+        for posting in postings: 
             
-        #Sorts and Returns most relevant based on Cosine Similarity
-        sorted_scores = sorted(document_scores.items(), key=lambda x: x[1], reverse =True)
-        
-        final_results = []
-        for document_id, score in sorted_scores[:k]:
-            final_results.append((self.doc_id_to_url[str(document_id)], document_id, score))
-         
-        return final_results
+            if len(heap_list) < 5:
+                heapq.heappush(heap_list, (cosine_score, document_id))
+            elif cosine_score > heap_list[0][0]:  
+                heapq.heapreplace(heap_list, (cosine_score, document_id))
+            
+
+
+        sorted_results = sorted(heap_list, reverse=True)
                     
                    
