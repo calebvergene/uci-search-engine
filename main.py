@@ -3,7 +3,7 @@ from inverted_index import create_inverted_index
 
 
 if __name__ == "__main__":
-    # for creating index
+    # uncomment below to create the inverted index
     # create_inverted_index()
 
 
