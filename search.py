@@ -105,14 +105,20 @@ class Search:
         for word in query_words:
             if word in self.inverted_index:
                 df = len(self.inverted_index[word])
-                idf_scores[word] = math.log(self.total_documents / df)
+                idf_scores[word] = math.log10(self.total_documents / df)
             else:
                 idf_scores[word] = 0
 
         #Creates the query Vector: keys = values & terms = frequency
-        query_vector = defaultdict(int)
+        query_TF = defaultdict(int)
         for word in query_words:
-            query_vector[word] += 1
+            query_TF[word] += 1
+
+        query_vector = {}
+        for word, tf in query_TF.items():
+            tf_weight = 1 + math.log10(tf)
+            query_vector[word] = tf_weight * idf_scores.get(word, 0.0)
+
         
         counter = 0
         for word in query_vector:
@@ -120,7 +126,10 @@ class Search:
             square = count ** 2
             counter += square
 
-        query_magnitude = math.sqrt(counter)
+        query_magnitude_squared = 0.0
+        for val in query_vector.values():
+            query_magnitude_squared += val * val
+        query_magnitude = math.sqrt(query_magnitude_squared) if query_magnitude_squared > 0 else 0.0
         
         #Calculate TFIDF scores for each document by looking up term frequencies for all query words in doc
         heap_lists = []
