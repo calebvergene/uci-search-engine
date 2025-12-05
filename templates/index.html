@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>UCI Search Engine</title>
+</head>
+<body>
+
+<h1>UCI Search Engine</h1>
+    <!-- Search "Bar" and Submit Button, Sends Query to Flask Search -->
+<form action="./search" method="GET">
+    <input type="text" name="query" required>
+    <button type="submit">Search</button>
+</form>
+
+    <!-- Show Error if Search Failed -->
+{% if error %}
+<p style="color:red;">Error: {{ error }}</p>
+{% endif %}
+
+    <!-- Show Result if Search Success -->
+{% if results %}
+<h2>Search Results for "{{ query }}"</h2>
+<p>Found {{ results|length }} results</p>
+    
+    <!-- Loops through Search Output and Prints to Interface -->
+{% for result in results %}
+<p>
+    <a href="{{ result[0] }}" target="_blank">{{ result[0] }}</a><br>
+    Score: {{ result[2] }}
+</p>
+{% endfor %}
+
+    <!-- Query Typed but no Results Found -->
+
+{% elif query %}
+<p>No results found for "{{ query }}"</p>
+{% endif %}
+
+</body>
+</html>
+
+EOF

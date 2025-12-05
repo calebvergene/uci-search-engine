@@ -1,6 +1,8 @@
 import heapq
 import json
 import re
+import math
+from collections import defaultdict
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
 from inverted_index import InvertedIndex
@@ -128,28 +130,91 @@ class Search:
             combined_postings = new_combined_postings
         
         return combined_postings
-            
+    
 
-    def _k_search_results(self, postings, k):
-        """Keep a max heap of k size"""
-        heap = []
+    def TF_IDF_Search(self, postings, k, query_words):
+        """ 
+        Rank documents using tf-idf with cosine similarity.
+        Also incorporates important words weighting (title, headers, bold).
+        """
+        # Calculate IDF for each query term
+        idf_scores = {}
+        document_scores = {}
+        for word in query_words:
+            if word in self.inverted_index:
+                df = len(self.inverted_index[word])
+                idf_scores[word] = math.log(self.total_documents / df)
+            else:
+                idf_scores[word] = 0
 
-        # Ranking / sorting based off score
+        #Creates the query Vector: keys = values & terms = frequency
+        query_vector = defaultdict(int)
+        for word in query_words:
+            query_vector[word] += 1
+        
+        counter = 0
+        for word in query_vector:
+            count = query_vector[word]
+            square = count ** 2
+            counter += square
+
+        query_magnitude = math.sqrt(counter)
+        
+        #Calculate TFIDF scores for each document by looking up term frequencies for all query words in doc
         for posting in postings:
-            # Weighed differently
-            score = posting["frequency"] + (posting["header_bold_count"]*3) + (posting["title_count"]*5) 
-            doc_tuple = (score, posting["document_id"])
-            heapq.heappush(heap, doc_tuple)
+            document_id = posting["document_id"]
+            document_vector = {}
+            document_mag_sq = 0
+            
+            for word in query_words:
+                if word in self.inverted_index:
+                    word_postings = self.inverted_index[word]
+    
+                    matched_posting = None
+                    for proper_posting in word_postings:
+                        if proper_posting["document_id"] == document_id:
+                            matched_posting = proper_posting
+                            break
+                            
+                    #Weigh boosts terms if Title, Bold, Heading
+                    if matched_posting is not None:
+                        tf = matched_posting["frequency"]
+                        weight = 1.0
+                        if matched_posting["title_count"] > 0:
+                            weight += 2.0
+                        if matched_posting["header_bold_count"] > 0:
+                            weight += 1.0
+                            
+                        #Calc for TFIDF
+                        weighted_tf = tf * weight
+                        tf_idf = weighted_tf * idf_scores[word]
+                        document_vector[word] = tf_idf
+                        document_mag_sq += tf_idf * tf_idf
+    
+            #Dot Product for Cosine Similarity 
+            dot_product = 0
+        
+            for word in query_words:
+                if word in document_vector:
+                    dot_product += query_vector[word] * document_vector[word]
+    
+            document_magnitude = math.sqrt(document_mag_sq)
+            
+            if document_magnitude > 0 and query_magnitude > 0:
+                cosine_score = dot_product / (query_magnitude * document_magnitude)
+            else:
+                document_scores[document_id] = 0
 
-            # Only keep heap len k. Pop smallest scored doc
-            if len(heap) > k:
-                heapq.heappop(heap)
+            document_scores[document_id] = cosine_score
 
-        # Make final sorted list
-        results = []
-        while heap:
-            score, doc_id = heapq.heappop(heap)
-            results.append((self.doc_id_to_url[str(doc_id)], doc_id, score))
-        results.reverse()
-
-        return results
+            
+        #Sorts and Returns most relevant based on Cosine Similarity
+        sorted_scores = sorted(document_scores.items(), key=lambda x: x[1], reverse =True)
+        
+        final_results = []
+        for document_id, score in sorted_scores[:k]:
+            final_results.append((self.doc_id_to_url[str(document_id)], document_id, score))
+         
+        return final_results
+                    
+                   
