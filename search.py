@@ -11,6 +11,7 @@ class Search:
     def __init__(self):
         self.lookup_table = {}
         self.doc_id_to_url = {}
+        self.doc_lengths = {}
         self.index_file = None  # Keep file open for performance
         self.ps = PorterStemmer()  # Reuse stemmer
         self.total_documents = 0
@@ -26,6 +27,10 @@ class Search:
         with open(doc_mapping_file_path, 'r', encoding='utf-8') as f:
             self.doc_id_to_url = json.load(f)
         
+        print("Loading document lengths...")
+        with open("doc_lengths.json", 'r', encoding='utf-8') as f:
+            self.doc_lengths = json.load(f)
+        
         # Open index file once and keep it open
         self.index_file = open("final_index.txt", 'r', encoding='utf-8')
         
@@ -34,6 +39,7 @@ class Search:
         
         print(f"✓ Loaded lookup table with {len(self.lookup_table)} terms")
         print(f"✓ Loaded {len(self.doc_id_to_url)} document mappings")
+        print(f"✓ Loaded {len(self.doc_lengths)} document lengths")
     
 
     def get_postings(self, term):
@@ -131,7 +137,7 @@ class Search:
 
     def _tf_idf_search(self, postings, k, query_words):
         """ 
-        Rank documents using TF-IDF with cosine similarity.
+        Rank documents using TF-IDF with cosine similarity and document length normalization.
         Uses disk-based lookup to avoid loading entire index.
         """
         # Calculate IDF for each query term
@@ -162,6 +168,9 @@ class Search:
             document_vector = {}
             document_mag_sq = 0
             
+            # Get document length for normalization
+            doc_length = self.doc_lengths.get(str(document_id), 1)
+            
             # For each query word, get its TF-IDF in this document
             for word in query_words:
                 if word not in self.lookup_table:
@@ -180,6 +189,10 @@ class Search:
                 if matched_posting is not None:
                     tf = matched_posting["frequency"]
                     
+                    # Apply document length normalization to TF
+                    # Shorter documents with same term frequency get higher scores
+                    normalized_tf = tf / (1.0 + math.log(doc_length + 1))
+                    
                     # Weight boost for title, headers, bold
                     weight = 1.0
                     if matched_posting["title_count"] > 0:
@@ -187,8 +200,8 @@ class Search:
                     if matched_posting["header_bold_count"] > 0:
                         weight += 1.0
                     
-                    # Calculate TF-IDF
-                    weighted_tf = tf * weight
+                    # Calculate TF-IDF with normalized TF
+                    weighted_tf = normalized_tf * weight
                     tf_idf = weighted_tf * idf_scores[word]
                     document_vector[word] = tf_idf
                     document_mag_sq += tf_idf * tf_idf
@@ -201,8 +214,9 @@ class Search:
             
             document_magnitude = math.sqrt(document_mag_sq)
             
+            # FIXED: Divide by BOTH magnitudes for proper cosine similarity
             if document_magnitude > 0 and query_magnitude > 0:
-                cosine_score = dot_product / query_magnitude
+                cosine_score = dot_product / (query_magnitude * document_magnitude)
             else:
                 cosine_score = 0
             

@@ -22,6 +22,7 @@ class InvertedIndex:
         self.inverted_index = {}
         self.docid_to_url = {}
         self.url_to_docid = {}
+        self.doc_lengths = {}
         self._check_punkt()
         self.ps = PorterStemmer()
         self.seen_fingerprints = set()
@@ -140,16 +141,18 @@ class InvertedIndex:
                 "title_count": titles.get(stem, 0)
             }
         
-        return output
+        return output, len(tokens)
     
     
-    def create_postings(self, document_id, token_dict):
+    def create_postings(self, document_id, token_dict, doc_length):
         """
         Updates the inverted index with each new token from the document
         token_dict format:
         key=token:str, 
         value={"freq":int, "positions":list[int], "header_bold_count":int, "title_count":int}
         """
+        self.doc_lengths[document_id] = doc_length
+        
         for token in token_dict:
             if token not in self.inverted_index:
                 self.inverted_index[token] = []
@@ -379,11 +382,14 @@ class InvertedIndex:
     
     
     def save_url_mappings(self):
-        """Save docID <-> URL mappings"""
+        """Save docID <-> URL mappings AND document lengths"""
         with open("docid_to_url.json", 'w', encoding='utf-8') as f:
             json.dump(self.docid_to_url, f)
         with open("url_to_docid.json", 'w', encoding='utf-8') as f:
             json.dump(self.url_to_docid, f)
+        
+        with open("doc_lengths.json", 'w', encoding='utf-8') as f:
+            json.dump(self.doc_lengths, f)
         
 
     def write_inverted_index(self):
@@ -421,13 +427,13 @@ def create_inverted_index():
                     if url_without_fragment in inverted_index.url_to_docid:
                         continue
                     
-                    token_dict = inverted_index.scrape_page(page_json)
+                    token_dict, doc_length = inverted_index.scrape_page(page_json)
                     words = list(token_dict.keys())
                     # duplicate check
                     if inverted_index.page_too_similar(words):
                         continue
 
-                    inverted_index.create_postings(report.indexed_documents, token_dict)
+                    inverted_index.create_postings(report.indexed_documents, token_dict, doc_length)
                     inverted_index.docid_to_url[report.indexed_documents] = url_without_fragment
                     inverted_index.url_to_docid[url_without_fragment] = report.indexed_documents
                     report.indexed_documents += 1
@@ -438,7 +444,7 @@ def create_inverted_index():
                         print(f"OFFLOADING PARTIAL INDEX #{partial_count}")
                         inverted_index.write_partial_index(partial_count)
                         partial_count += 1
-                        self.inverted_index.clear()
+                        inverted_index.inverted_index.clear()
                         report.read_disk_size()
                         report.write_report()
             
