@@ -10,9 +10,11 @@ from generate_report import Report
 import os, json
 from urllib.parse import urldefrag
 
-# Suppress BeautifulSoup warnings
+# suppress BeautifulSoup warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='bs4')
 
+# Inverted index class, handles scraping and processing each posting
+# ==========================================================
 
 class InvertedIndex:
     def __init__(self, Report) -> None:
@@ -31,26 +33,26 @@ class InvertedIndex:
         @parameters: Take a page_json as the information to scrape
         @return: Return a hash_map with key=token:str, body=dict{freq:int, positions:list[int], header_bold_count:int, title_count:int}
         """
-        # First: Use beautiful soup to scrape the page for the relevent text
+        # first: Use beautiful soup to scrape the page for the relevent text
         html = page_json.get("content", "")
 
         if not html:
             return {}
 
-        # Parse HTML
+        # parse HTML
         soup = BeautifulSoup(html, "html.parser")
 
-        # Remove noise globally
+        # remove noise globally
         for tag in soup(["script", "style", "noscript"]):
             tag.decompose()
 
-        # Get the title first (weighed heavily)
+        # get the title first (weighed heavily)
         title_counts = self._get_title_counts(soup)
         
-        # Get the header counts next
+        # get the header counts next
         header_counts = self._get_head_bold_counts(soup)
 
-        # Call the helper function to build final output combining the title, header, and body counts
+        # call the helper function to build final output combining the title, header, and body counts
         output = self._build_final_output(soup, title_counts, header_counts)
         return output
 
@@ -60,7 +62,7 @@ class InvertedIndex:
         @parameters: soup is the beautiful soup to scrap the html for text words in the title
         @return: a hash_map of key=token:str : value=freq:int
         """
-        # First get the title
+        # first get the title
         if not soup or not soup.title or not soup.title.string:
             return {}
             
@@ -81,13 +83,13 @@ class InvertedIndex:
         @parameters: soup is the beautiful soup to scrap the html for text words in the title
         @return: a hash_map of key=token:str : value=freq:int
         """
-        # First get all relevant text split by each "node" (section of text)
+        # first get all relevant text split by each "node" (section of text)
         header_nodes = soup.find_all(["h1","h2","h3","h4","h5","h6","b","strong"])
 
         if not header_nodes:
             return {}
 
-        # Because each header node is a body of text this will run in O(n^2) as it will iterate through each node and every word inside each node
+        # because each header node is a body of text this will run in O(n^2) as it will iterate through each node and every word inside each node
         header_counts = defaultdict(int)
         for node in header_nodes:
             htext = node.get_text(separator=" ", strip=True)
@@ -107,12 +109,12 @@ class InvertedIndex:
         @parameters: soup is the beautiful soup to scrap the html for text words in the title
         @return: look at the return typing for scrape_page()
         """
-        # Grab all the text
+        # grab all the text
         full_text = soup.get_text(separator=" ", strip=True)
         full_text = re.sub(r"\s+", " ", full_text)
 
         tokens = word_tokenize(full_text)
-        # Keep track of the frequency and position of each token
+        # keep track of the frequency and position of each token
         freq_map = defaultdict(int)
         pos_map = defaultdict(list)
 
@@ -139,6 +141,29 @@ class InvertedIndex:
             }
         
         return output
+    
+    
+    def create_postings(self, document_id, token_dict):
+        """
+        Updates the inverted index with each new token from the document
+        token_dict format:
+        key=token:str, 
+        value={"freq":int, "positions":list[int], "header_bold_count":int, "title_count":int}
+        """
+        for token in token_dict:
+            if token not in self.inverted_index:
+                self.inverted_index[token] = []
+            
+            posting = {
+                "document_id": document_id,
+                "frequency": token_dict[token]["freq"],
+                "positions": token_dict[token]["positions"],
+                "header_bold_count": token_dict[token]["header_bold_count"],
+                "title_count": token_dict[token]["title_count"]
+            }
+            
+            self.inverted_index[token].append(posting)
+
 
     @staticmethod
     def _check_punkt() -> None:
@@ -153,7 +178,11 @@ class InvertedIndex:
 
     
 
+
+
+
     # for detecting duplicate pages
+    # ==========================================================
     def hash(self, text):
         result = 0
         for i, char in enumerate(text):
@@ -225,29 +254,140 @@ class InvertedIndex:
 
 
 
-    def create_postings(self, document_id, token_dict):
-        """
-        Updates the inverted index with each new token from the document
-        token_dict format:
-        key=token:str, 
-        value={"freq":int, "positions":list[int], "header_bold_count":int, "title_count":int}
-        """
-        for token in token_dict:
-            if token not in self.inverted_index:
-                self.inverted_index[token] = []
-            
-            posting = {
-                "document_id": document_id,
-                "frequency": token_dict[token]["freq"],
-                "positions": token_dict[token]["positions"],
-                "header_bold_count": token_dict[token]["header_bold_count"],
-                "title_count": token_dict[token]["title_count"]
-            }
-            
-            self.inverted_index[token].append(posting)
 
+
+
+
+
+    # handles writing the indexes to split files, then merge
+    # =============================================================================
+    
+    def write_partial_index(self, partial_num):
+        filename = f"partial_index_{partial_num}.txt"
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            for term in sorted(self.inverted_index.keys()):
+                postings = self.inverted_index[term]
+                # term docid:freq:hbc:tc:pos1,pos2,...
+                # basically, seperated by : so that it can be easily parsed
+                postings_list = []
+                for posting in postings:
+                    positions_str = ','.join(map(str, posting['positions']))
+                    posting_str = f"{posting['document_id']}:{posting['frequency']}:{posting['header_bold_count']}:{posting['title_count']}:{positions_str}"
+                    postings_list.append(posting_str)
+                
+                postings_str = '|'.join(postings_list)
+                f.write(f"{term} {postings_str}\n")
+        
+        print(f"✓ Wrote {filename} with {len(self.inverted_index)} terms")
+    
+    
+    # merge indexes into one index
+    def merge_partial_indices(self, num_partials):
+        partial_files = [f"partial_index_{i}.txt" for i in range(num_partials)]
+        file_handles = [open(f, 'r', encoding='utf-8') for f in partial_files]
+        current_lines = []
+
+        for fh in file_handles:
+            line = fh.readline().strip()
+            if line:
+                term = line.split(' ', 1)[0]
+                current_lines.append((term, line, fh))
+        
+        lookup_table = {}
+        terms_merged = 0
+        
+        with open("final_index.txt", 'w', encoding='utf-8') as out_file:
+            while current_lines:
+                current_lines.sort(key=lambda x: x[0])
+                min_term = current_lines[0][0]
+                merged_postings = {}  # docid -> posting data
+                i = 0
+                while i < len(current_lines):
+                    term, line, fh = current_lines[i]
+                    
+                    if term == min_term:
+                        parts = line.split(' ', 1)
+                        if len(parts) == 2:
+                            postings_str = parts[1]
+                            # docid:freq:hbc:tc:pos1,pos2,...|docid:freq:hbc:tc:pos1,pos2,...
+                            for posting_str in postings_str.split('|'):
+                                posting_parts = posting_str.split(':', 4)
+                                if len(posting_parts) == 5:
+                                    docid = int(posting_parts[0])
+                                    freq = int(posting_parts[1])
+                                    hbc = int(posting_parts[2])
+                                    tc = int(posting_parts[3])
+                                    positions = posting_parts[4]
+                                    
+                                    # merge postings for same docid (shouldn't happen but just in case)
+                                    if docid in merged_postings:
+                                        merged_postings[docid]['freq'] += freq
+                                        merged_postings[docid]['hbc'] += hbc
+                                        merged_postings[docid]['tc'] += tc
+                                    else:
+                                        merged_postings[docid] = {
+                                            'freq': freq,
+                                            'hbc': hbc,
+                                            'tc': tc,
+                                            'positions': positions
+                                        }
+                        
+                        next_line = fh.readline().strip()
+                        if next_line:
+                            next_term = next_line.split(' ', 1)[0]
+                            current_lines[i] = (next_term, next_line, fh)
+                            i += 1
+                        else:
+                            current_lines.pop(i)
+                    else:
+                        i += 1
+                
+                # write merged postings for this term
+                offset = out_file.tell()
+                postings_list = []
+                for docid in sorted(merged_postings.keys()):
+                    p = merged_postings[docid]
+                    posting_str = f"{docid}:{p['freq']}:{p['hbc']}:{p['tc']}:{p['positions']}"
+                    postings_list.append(posting_str)
+                
+                postings_str = '|'.join(postings_list)
+                line = f"{min_term} {postings_str}\n"
+                out_file.write(line)
+                
+                # THIS CREATES LOOKUP TABLE
+                lookup_table[min_term] = {
+                    "offset": offset,
+                    "length": len(line.encode('utf-8'))
+                }
+                
+                terms_merged += 1
+                if terms_merged % 10000 == 0:
+                    print(f"  Merged {terms_merged} terms...")
+        
+        for fh in file_handles:
+            fh.close()
+        
+        with open("index_lookup.json", 'w', encoding='utf-8') as f:
+            json.dump(lookup_table, f)
+
+        
+        for partial_file in partial_files:
+            if os.path.exists(partial_file):
+                os.remove(partial_file)
+                print(f"  Deleted {partial_file}")
+    
+    
+    def save_url_mappings(self):
+        """Save docID <-> URL mappings"""
+        with open("docid_to_url.json", 'w', encoding='utf-8') as f:
+            json.dump(self.docid_to_url, f)
+        with open("url_to_docid.json", 'w', encoding='utf-8') as f:
+            json.dump(self.url_to_docid, f)
+        
 
     def write_inverted_index(self):
+        """Legacy method - keeping for backwards compatibility"""
         with open("inverted_index.json", "w") as f:
             json.dump(self.inverted_index, f)
         
@@ -258,10 +398,13 @@ class InvertedIndex:
 def create_inverted_index():
     report = Report()
     inverted_index = InvertedIndex(report)
+    
+    # partial indices
+    partial_count = 0
+    OFFLOAD_THRESHOLD = 10000  # basically, offload every 10k documents
 
     for root, dir, files in os.walk('DEV'):
         for file in files:
-            # Skip non-JSON files
             if not file.endswith('.json'):
                 continue
             
@@ -289,7 +432,13 @@ def create_inverted_index():
                     inverted_index.url_to_docid[url_without_fragment] = report.indexed_documents
                     report.indexed_documents += 1
                     print('Document #', report.indexed_documents)
-                    if not report.indexed_documents % 5000:
+                    
+                    # OFFLOAD TO DISK when threshold reached
+                    if report.indexed_documents % OFFLOAD_THRESHOLD == 0:
+                        print(f"OFFLOADING PARTIAL INDEX #{partial_count}")
+                        inverted_index.write_partial_index(partial_count)
+                        partial_count += 1
+                        self.inverted_index.clear()
                         report.read_disk_size()
                         report.write_report()
             
@@ -302,7 +451,17 @@ def create_inverted_index():
                 print("Skipping this file...")
                 continue
 
-    # generate report at the end
-    inverted_index.write_inverted_index()
+    # final partial index (leftover documents)
+    if inverted_index.inverted_index:
+        inverted_index.write_partial_index(partial_count)
+        partial_count += 1
+    
+    # MERGE all partial indices into final index
+    if partial_count > 0:
+        inverted_index.merge_partial_indices(partial_count)
+    
+    inverted_index.save_url_mappings()
+    
+    # final report
     report.read_disk_size()
     report.write_report()

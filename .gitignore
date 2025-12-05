@@ -2,5 +2,7 @@ env/
 venv/
 DEV/
 developer.zip
-inverted_index.json
-doc_id_to_url.json
+final_index.txt
+docid_to_url.json
+index_lookup.json
+url_to_docid.json
