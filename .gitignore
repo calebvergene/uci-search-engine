@@ -6,3 +6,4 @@ final_index.txt
 docid_to_url.json
 index_lookup.json
 url_to_docid.json
+doc_lengths.json
