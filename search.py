@@ -43,7 +43,7 @@ class Search:
 
     
 
-    def get_postings(self, term):
+    def get_postings(self, term, include_positions=False):
         # return empty list if term doesn't exist
         if term not in self.lookup_table:
             return []
@@ -79,6 +79,13 @@ class Search:
                     "header_bold_count": hbc,
                     "title_count": tc
                 }
+                
+                # only parse positions if requested (slower but needed for proximity)
+                if include_positions:
+                    positions_str = posting_parts[4]
+                    positions = [int(p) for p in positions_str.split(',') if p]
+                    posting["positions"] = positions
+                
                 postings.append(posting)
         
         return postings
@@ -89,6 +96,7 @@ class Search:
         query_words = self._tokenize_query(query)
         if not query_words: 
             return []
+        
         # build the 2-gram and 3-gram from query words
         twogram = self._make_ngrams(query_words, 2)
         threegram = self._make_ngrams(query_words, 3)
@@ -131,8 +139,8 @@ class Search:
                 "title_count": postings_by_doc[doc_id]["title_count"]
             })
         
-        # rank using cosine similarity with tf-idf
-        results = self._cosine_search(combined_postings, 20, query_terms)
+        # rank using cosine similarity with tf-idf + proximity boost
+        results = self._cosine_search(combined_postings, 20, query_words)
         return results
 
 
@@ -151,6 +159,7 @@ class Search:
                 query_stems.append(stem)
         return query_stems
     
+    
     def _make_ngrams(self, stems, n):
         """
         :param stems: the root stems of all the words
@@ -168,14 +177,73 @@ class Search:
     
         return ngrams
 
+
+    def _calculate_proximity_score(self, query_words, document_id):
+        """
+        Calculate proximity bonus for query terms appearing close together.
+        Returns a score between 0 and 1 based on how close terms are.
+        """
+        if len(query_words) < 2:
+            return 0  # no proximity for single-word queries
+        
+        # get positions for all query words in this document
+        term_positions = {}
+        for word in query_words:
+            if word not in self.lookup_table:
+                continue
+            
+            # get postings WITH positions
+            word_postings = self.get_postings(word, include_positions=True)
+            
+            # find positions for this specific document
+            for posting in word_postings:
+                if posting["document_id"] == document_id:
+                    if "positions" in posting:
+                        term_positions[word] = posting["positions"]
+                    break
+        
+        # need at least 2 terms with positions
+        if len(term_positions) < 2:
+            return 0
+        
+        # find minimum distance between any two query terms
+        min_distance = float('inf')
+        
+        terms = list(term_positions.keys())
+        for i in range(len(terms)):
+            for j in range(i + 1, len(terms)):
+                term1_positions = term_positions[terms[i]]
+                term2_positions = term_positions[terms[j]]
+                
+                # find closest occurrence between these two terms
+                for pos1 in term1_positions:
+                    for pos2 in term2_positions:
+                        distance = abs(pos1 - pos2)
+                        min_distance = min(min_distance, distance)
+        
+        # if terms are right next to each other (distance=1), max bonus
+        # if far apart (distance>50), minimal bonus
+        if min_distance == float('inf'):
+            return 0
+        
+        # proximity score decreases exponentially with distance
+        # distance 1 = score ~1.0
+        # distance 10 = score ~0.37
+        # distance 50 = score ~0.01
+        proximity_score = math.exp(-min_distance / 10)
+        
+        return proximity_score
+
+
     def _cosine_search(self, postings, k, query_words):
         # start timing to enforce 250ms limit
         start_time = time.time()
         max_time = 0.25  # 250 milliseconds
         
         # how much more important are terms in special fields?
-        title_boost = 3.0       # title terms count 3x more
-        header_bold_boost = 1.5 # header/bold terms count 1.5x more
+        title_boost = 3.0
+        header_bold_boost = 1.5
+        proximity_boost = 2.0  # how much to boost proximity matches
         
         # calculate idf (inverse document frequency) for each query term
         # rare terms get higher idf scores
@@ -204,9 +272,9 @@ class Search:
         # heuristic: prioritize docs with terms in title, then headers, then high frequency
         postings.sort(
             key=lambda p: (
-                p["title_count"] * 100 +        # title matches are super important
-                p["header_bold_count"] * 10 +   # header/bold matches are important
-                p["frequency"]                   # frequency matters too
+                p["title_count"] * 100 +
+                p["header_bold_count"] * 10 +
+                p["frequency"]
             ),
             reverse=True
         )
@@ -228,7 +296,7 @@ class Search:
             
             # pivoted length normalization - penalize long documents
             # shorter docs with same term frequency will score higher
-            slope = 0.2  # how much length matters (0.1-0.3 typical)
+            slope = 0.1
             length_norm = 1.0 - slope + slope * (doc_length / self.avg_doc_length)
             
             # build document vector for this doc
@@ -275,12 +343,15 @@ class Search:
                     document_vector[word] = normalized_tf_idf
                     document_mag_sq += normalized_tf_idf * normalized_tf_idf
             
-            # calculate score as weighted sum instead of cosine
-            # this gives better differentiation than cosine for simple queries
-            total_score = 0
+            # calculate base score as weighted sum
+            base_score = 0
             for word in query_words:
                 if word in document_vector:
-                    total_score += document_vector[word]
+                    base_score += document_vector[word]
+            
+            # PROXIMITY BOOST: add bonus if query terms appear close together
+            proximity_score = self._calculate_proximity_score(query_words, document_id)
+            total_score = base_score + (proximity_score * proximity_boost)
             
             # maintain a min heap of top k results
             # if heap isn't full yet, just add
