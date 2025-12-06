@@ -1,3 +1,4 @@
+import token
 from bs4 import BeautifulSoup
 import re
 import nltk
@@ -119,6 +120,10 @@ class InvertedIndex:
         freq_map = defaultdict(int)
         pos_map = defaultdict(list)
 
+        # Keep track of stems in order for 2-gram and 3-gram
+        # [(stem, pos), ...]
+        ordered_stems = []
+
         for pos, token in enumerate(tokens):
             token = token.lower()
             if not re.fullmatch(r"[a-z0-9]+", token):
@@ -130,6 +135,30 @@ class InvertedIndex:
 
             freq_map[stem] += 1
             pos_map[stem].append(pos)
+
+            ordered_stems.append((stem, pos))
+
+        # Build 2-grams and 3-grams
+        for n in [2, 3]:
+            # when we have less words then grams move to next iteration
+            if len(ordered_stems) < n:
+                continue
+                
+            for i in range(len(ordered_stems) - n + 1):
+                # For each stem get n stems together
+                stem_slice = []
+                for j in range(i, i + n):
+                    stem_slice.append(ordered_stems[j][0])
+                
+                # get the position for the whole slice
+                start_position = ordered_stems[i][1]
+
+                # join with symbol so we know its a n-gram
+                ngram_token = "_".join(stem_slice)
+
+                # add n-gram to frequency map and position map 
+                freq_map[ngram_token] += 1
+                pos_map[ngram_token].append(start_position)
 
         output = {}
         all_stems = set(freq_map.keys()) | set(titles.keys()) | set(headers.keys())
@@ -428,7 +457,10 @@ def create_inverted_index():
                         continue
                     
                     token_dict, doc_length = inverted_index.scrape_page(page_json)
-                    words = list(token_dict.keys())
+
+                    # Change duplicate check to only look at single word tokens not n-grams
+                    words = [t for t in token_dict.keys() if "_" not in t]
+                    
                     # duplicate check
                     if inverted_index.page_too_similar(words):
                         continue

@@ -89,12 +89,22 @@ class Search:
         query_words = self._tokenize_query(query)
         if not query_words: 
             return []
-        
+        # build the 2-gram and 3-gram from query words
+        twogram = self._make_ngrams(query_words, 2)
+        threegram = self._make_ngrams(query_words, 3)
+
+        # add them to the final searched query terms
+        query_terms = query_words + twogram + threegram
+
         # find all documents that contain at least one query term (OR search)
         all_doc_ids = set()
-        postings_by_doc = defaultdict(lambda: {"frequency": 0, "header_bold_count": 0, "title_count": 0})
+        postings_by_doc = defaultdict(lambda: {
+            "frequency": 0,
+            "header_bold_count": 0, 
+            "title_count": 0
+        })
         
-        for word in query_words:
+        for word in query_terms:
             if word not in self.lookup_table:
                 continue
             
@@ -122,7 +132,7 @@ class Search:
             })
         
         # rank using cosine similarity with tf-idf
-        results = self._cosine_search(combined_postings, 20, query_words)
+        results = self._cosine_search(combined_postings, 20, query_terms)
         return results
 
 
@@ -141,6 +151,22 @@ class Search:
                 query_stems.append(stem)
         return query_stems
     
+    def _make_ngrams(self, stems, n):
+        """
+        :param stems: the root stems of all the words
+        :param n: how many grams you want
+        :return ngrams: will return a list of the n-grams
+        """
+        # If we have less stem tokens then grams then return nothing
+        if len(stems) < n:
+            return []
+
+        ngrams = []
+        for i in range(len(stems) - n + 1):
+            # Using the same special symbol from indexing for the search
+            ngrams.append("_".join(stems[i:i + n]))
+    
+        return ngrams
 
     def _cosine_search(self, postings, k, query_words):
         # start timing to enforce 250ms limit

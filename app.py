@@ -6,7 +6,7 @@ app = Flask(__name__)
 search_engine = Search()
 
 #Creates Search Engine In Flask Browser
-search_engine.load_inverted_index_from_file("inverted_index.json", "doc_id_to_url.json")
+search_engine.load_inverted_index_from_file("index_lookup.json", "docid_to_url.json")
 
 #Loads "index template"
 @app.route('/')
