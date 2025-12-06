@@ -16,7 +16,7 @@ class Report:
 
 
     def read_disk_size(self):
-        size_bytes = os.path.getsize("inverted_index.json")
+        size_bytes = os.path.getsize("final_index.txt")
         self.index_disk_size = size_bytes / 1024        
     
             
